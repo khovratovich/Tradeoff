@@ -6,10 +6,13 @@ using namespace std;
 
 
 #include "./MersenneTwister.h"
-#define WIDTH_TEST 40000
+#define WIDTH_TEST 4000
 
 #define START_LATENCY 0
 #define RAND32 (mtr.randInt())
+
+//Fill
+MTRand mtr;
 
 /**
 * p2floor(x):
@@ -96,7 +99,6 @@ struct RandomGraph
 tradeoff RankingLyra(unsigned q, unsigned top_size)  //Ranking method for Lyra/Wandering graph, where F is stored.  <q> is the segment length, and <top_size> is number of highest complexities stored
 {
 	//Fill
-	MTRand mtr;
 	unsigned input_cost = 0;
 	uint32_t width = WIDTH_TEST;
 	RandomGraph Graph(width);
@@ -176,7 +178,6 @@ tradeoff RankingLyra(unsigned q, unsigned top_size)  //Ranking method for Lyra/W
 tradeoff RankingYescrypt(unsigned q, unsigned top_size)  //Ranking method with parameter <q> for yescrypt graph, initial pass
 {
 	//Fill
-	MTRand mtr;
 	unsigned input_cost = 0;
 	uint32_t width = WIDTH_TEST;
 	RandomGraph Graph(width);
@@ -191,7 +192,7 @@ tradeoff RankingYescrypt(unsigned q, unsigned top_size)  //Ranking method with p
 		columns[extra_node].push_back(i);
 		if (i%q == 0)
 		{
-			Graph[i] = node(true, extra_node);
+			Graph[i] = node(true, extra_node);//supposed to store
 		}
 		else
 		{
@@ -209,7 +210,6 @@ tradeoff RankingYescrypt(unsigned q, unsigned top_size)  //Ranking method with p
 	//Test
 	float prev_access = 1;
 	float prev_compute = 1;
-	unsigned layer_length = width / q;
 	vector<uint64_t> top;  //The largest access cost values, sorted, top[0] is the highest
 	top.resize(top_size, input_cost);
 	for (unsigned i = 1; i< width; ++i)
@@ -219,7 +219,7 @@ tradeoff RankingYescrypt(unsigned q, unsigned top_size)  //Ranking method with p
 		total_latency += Graph[extra_node].latency + 1;
 		total_read += Graph[extra_node].read;
 
-		if (Graph[extra_node].access> top[top_size - 1]) //Among the most expensive nodes => need to store output of F
+		if ((Graph[extra_node].access> top[top_size - 1]) ||( Graph[i].stored)) //Among the most expensive nodes or every q-th => need to store 
 		{
 			Graph[i].stored = true;
 			Graph[i].access = 0;
@@ -229,42 +229,32 @@ tradeoff RankingYescrypt(unsigned q, unsigned top_size)  //Ranking method with p
 		}
 		else
 		{
-			if (Graph[i].stored)
+			Graph[i].latency = max(Graph[extra_node].latency, Graph[i - 1].latency) + 1;
+			Graph[i].access = Graph[i - 1].access + Graph[extra_node].access + 1;
+			Graph[i].read = Graph[i - 1].read + Graph[extra_node].read;
+			unsigned rank = top_size;  //Check if the new access complexity is in the top
+			while (rank>0)//adding new value to the top
 			{
-				Graph[i].access = 0;
-				total_stored++;
-				Graph[i].latency = 0;
-				Graph[i].read = 1;
+				if (top[rank - 1]<Graph[i].access)
+					rank--;
+				else break;
 			}
-			else
-			{
-				Graph[i].latency = max(Graph[extra_node].latency, Graph[i - 1].latency) + 1;
-				Graph[i].access = Graph[i - 1].access + Graph[extra_node].access + 1;
-				Graph[i].read = Graph[i - 1].read + Graph[extra_node].read;
-				unsigned rank = top_size;  //Check if the new access complexity is in the top
-				while (rank>0)//adding new value to the top
-				{
-					if (top[rank - 1]<Graph[i].access)
-						rank--;
-					else break;
-				}
-				top.insert(top.begin() + rank, Graph[i].access);
-				top.pop_back();
-			}
+			top.insert(top.begin() + rank, Graph[i].access);
+			top.pop_back();
 		}
 	}
 	float save = (float)width / total_stored;
-	float penalty = (double)total_compute / (width - 1);
-	float latency = (double)total_latency / (width - 1);
-	float read = (double)total_read / (width - 1);
+	float penalty = (float)total_compute / width;
+	float latency = (float)total_latency / width;
+	float read = (float)total_read / width;
 	return tradeoff(save, penalty, latency, 0, read);
 
 }
 
-tradeoff RankingYescryptLatency(unsigned q, unsigned top_size)  //Ranking method with parameter <q> for yescrypt graph, initial pass
+tradeoff RankingYescryptLatency(unsigned q, unsigned top_size)  
+//Ranking method with parameter <q> for yescrypt graph, initial pass. Top latency values are stored, not top access values
 {
 	//Fill
-	MTRand mtr;
 	unsigned input_cost = 0;
 	uint32_t width = WIDTH_TEST;
 	RandomGraph Graph(width);
@@ -342,9 +332,9 @@ tradeoff RankingYescryptLatency(unsigned q, unsigned top_size)  //Ranking method
 		}
 	}
 	float save = (float)width / total_stored;
-	float penalty = (double)total_compute / (width - 1);
-	float latency = (double)total_latency / (width - 1);
-	float read = (double)total_read / (width - 1);
+	float penalty = (double)total_compute / width;
+	float latency = (double)total_latency / width;
+	float read = (double)total_read / width;
 	return tradeoff(save, penalty, latency, 0, read);
 
 }
@@ -353,7 +343,6 @@ tradeoff RankingYescryptLatency(unsigned q, unsigned top_size)  //Ranking method
 tradeoff RankingRandom(unsigned q, unsigned top_size)  //Ranking method with parameter <q> for random graph
 {
 	//Fill
-	MTRand mtr;
 	unsigned input_cost = 0;
 	uint32_t width = WIDTH_TEST;
 	RandomGraph Graph(width);
@@ -439,7 +428,6 @@ tradeoff RankingRandom(unsigned q, unsigned top_size)  //Ranking method with par
 tradeoff AdvancedMultiRandom(unsigned width, unsigned q, unsigned k)  //Attacking random k-pass graph with advanced technique
 {
 	//Fill
-	MTRand mtr;
 	unsigned input_cost = 0;
 	RandomGraph Graph(width);
 	vector<vector<unsigned> > columns;  //Alternative storage
@@ -543,26 +531,24 @@ tradeoff AdvancedMultiRandom(unsigned width, unsigned q, unsigned k)  //Attackin
 }
 
 
-tradeoff RankingMultiYescrypt(unsigned width, unsigned q, float k)  //Attacking random k-pass graph with advanced technique
+tradeoff RankingYescryptMulti(unsigned q, unsigned top_size, float k)  //Attacking random k-pass graph with advanced technique
 {
-	//Fill
-	MTRand mtr;
 	unsigned input_cost = 0;
+	uint32_t width = WIDTH_TEST;
 	RandomGraph Graph(width);
 	vector<vector<unsigned> > columns;  //Alternative storage
 	columns.resize(width);
 	unsigned extra_node = 1;
 	for (unsigned i = 0; i< width; ++i)
 	{
-		if (i == 0)
-			extra_node = 0;
-		else if (i< width / k)
+		extra_node = (i == 0) ? 0 : RAND32;
+		if( (i != 0) && (i< width / k))
 			extra_node = wrap(extra_node, i);
-		else extra_node = i - RAND32 % (int)(width / k);
+		else extra_node %= (int)(width / k);
 		columns[extra_node].push_back(i);
 		if (i%q == 0)
 		{
-			Graph[i] = node(true, extra_node);
+			Graph[i] = node(true, extra_node); //supposed to store
 		}
 		else
 		{
@@ -572,93 +558,69 @@ tradeoff RankingMultiYescrypt(unsigned width, unsigned q, float k)  //Attacking 
 		Graph[i].access = input_cost;
 	}
 
-	uint64_t layer_access = 0;
-	uint64_t layer_compute = 0;
-	uint64_t layer_stored = 0;
 	uint64_t total_stored = 0;
-	uint64_t total_compute = 0;
-	uint64_t total_latency = 0;
+	uint64_t total_compute = 1;//First element skipped
+	uint64_t total_latency = 1;
 	uint64_t total_read = 0;
 
 	//Test
 	float prev_access = 1;
 	float prev_compute = 1;
-	unsigned layer_length = width / q;
-	unsigned top_size = layer_length;
 	vector<uint64_t> top;  //The largest access cost values, sorted, top[0] is the highest
 	top.resize(top_size, input_cost);
 	for (unsigned i = 1; i< width; ++i)
+		//Strategy at the second pass: overwritten blocks are considered as new ones. However, for calculation simplicity, we overwrite the access complexity and 
 	{
 		extra_node = Graph[i].extra_node;
 		total_compute += Graph[extra_node].access + 1;
 		total_latency += Graph[extra_node].latency + 1;
 		total_read += Graph[extra_node].read;
 
-		if (Graph[extra_node].access> top[top_size - 1]) //Among the most expensive nodes => need to store output of F
+		if ((Graph[extra_node].access> top[top_size - 1]) || Graph[i].stored) //Among the most expensive nodes or every q-th block => need to store it
 		{
-			if ((i< width / k) || (!Graph[i].stored))//first pass or the same element was not stored at the first pass
+			if ((i < width / k))//first pass 
 			{
-				Graph[i].stored = true;
 				total_stored++;
-			}
-
-			Graph[i].access = 0;
-			Graph[i].latency = 0;
-			Graph[i].read = 1;
-		}
-		else
-		{
-			if (i%q == 0) //Store always, do not set the .stored field to true
-			{
 				Graph[i].access = 0;
-				if (i< width / k)//first pass
-					total_stored++;
 				Graph[i].latency = 0;
 				Graph[i].read = 1;
 			}
-			else
+			else  //second pass. Overwrite the access complexity of extra node
 			{
-				if ((i> width / k) && (Graph[i].stored))//do not store it anymore
-				{
-					Graph[i].stored = false;
-					total_stored--;
-				}
-				Graph[i].latency = max(Graph[extra_node].latency, Graph[i - 1].latency) + 1;
-				Graph[i].access = Graph[i - 1].access + Graph[extra_node].access + 1;
-				Graph[i].read = Graph[i - 1].read + Graph[extra_node].read;
-				unsigned rank = top_size;  //Check if the new access complexity is in the top
-				while (rank>0)//adding new value to the top
-				{
-					if (top[rank - 1]<Graph[i].access)
-						rank--;
-					else break;
-				}
-				top.insert(top.begin() + rank, Graph[i].access);
-				top.pop_back();
+				total_stored++;
+				Graph[extra_node].access = Graph[i].access = 0;
+				Graph[extra_node].latency = Graph[i].access = 0;
+				Graph[extra_node].read = Graph[i].access = 1;
 			}
 		}
+		else
+		{
+			Graph[i].latency = max(Graph[extra_node].latency, Graph[i - 1].latency) + 1;
+			Graph[i].access = Graph[i - 1].access + Graph[extra_node].access + 1;
+			Graph[i].read = Graph[i - 1].read + Graph[extra_node].read;
+			unsigned rank = top_size;  //Check if the new access complexity is in the top
+			while (rank>0)//adding new value to the top
+			{
+				if (top[rank - 1]<Graph[i].access)
+					rank--;
+				else break;
+			}
+			top.insert(top.begin() + rank, Graph[i].access);
+			top.pop_back();
+		}
+		
 	}
-	float save = (float)width / total_stored;
-	float penalty = (double)total_compute / (width - 1);
-	float latency = (double)total_latency / (width - 1);
-	float read = (double)total_read / (width - 1);
-	//printf("Memory saving %2.2f ", (float) width/total_stored);
-	//double log_penalty = log((double)total_compute/width)/log((double)2);
-	//	printf("Log-Total compute: %2.2f Log-Penalty: %2.2f Memory factor:%d\n", log((double)total_compute)/log((double)2),log((double)total_compute/width)/log((double)2),q/2);
+	total_stored += (width - total_stored) / 16; //storing output of Salsa20
+	float save = ((float)width/k) / total_stored;
+	float penalty = (double)total_compute / (width);
+	float latency = (double)total_latency / (width);
+	float read = (double)total_read / (width);
 	return tradeoff(save, penalty, latency, 0, read);
 
 }
 
-vector<tradeoff> ComputePenalties(tradeoff TradeoffFunc(unsigned, unsigned))//Computing average tradeoff for <TradeoffFunc> method called with (memory reduction,
+vector<tradeoff> OutputPenalties(FILE* fp,vector<tradeoff> tradeoffs)
 {
-	unsigned tests = 10;
-	vector<tradeoff> tradeoffs;
-	for (unsigned t = 0; t<tests; ++t)
-	{
-		for (unsigned q = 2; q <= 80; q++)
-			tradeoffs.push_back(TradeoffFunc(q, WIDTH_TEST / (3*q)));
-	}
-
 	std::sort(tradeoffs.begin(), tradeoffs.end());
 
 	vector<float> averages(100, 0);
@@ -685,7 +647,7 @@ vector<tradeoff> ComputePenalties(tradeoff TradeoffFunc(unsigned, unsigned))//Co
 		}
 	}
 	vector<tradeoff> results;
-	FILE* fp = fopen("penalties-yes.log", "w+");
+	
 	for (unsigned i = 1; i<100; ++i)
 	{
 		if (counts[i]>0)
@@ -695,11 +657,25 @@ vector<tradeoff> ComputePenalties(tradeoff TradeoffFunc(unsigned, unsigned))//Co
 			results.push_back(tradeoff(i, averages[i] / counts[i], av_latency[i] / counts[i], 0, av_read[i] / counts[i]));
 		}
 	}
-	fclose(fp);
 
 
 
 	return results;
+}
+
+vector<tradeoff> ComputePenalties(tradeoff TradeoffFunc(unsigned, unsigned))//Computing average tradeoff for <TradeoffFunc> method called with (memory reduction,
+{
+	unsigned tests = 100;
+	vector<tradeoff> tradeoffs;
+	for (unsigned t = 0; t<tests; ++t)
+	{
+		for (unsigned q = 2; q <= 80; q++)
+			tradeoffs.push_back(TradeoffFunc(q, WIDTH_TEST / (3*q)));
+	}
+	FILE* fp = fopen("penalties-yes.log", "w+");
+	tradeoffs =  OutputPenalties(fp,tradeoffs);
+	fclose(fp);
+	return tradeoffs;
 }
 
 
@@ -713,53 +689,20 @@ vector<tradeoff> ComputePenaltiesMulti(tradeoff TradeoffFunc(unsigned, unsigned,
 			tradeoffs.push_back(TradeoffFunc(q, WIDTH_TEST / (3 * q),passes));
 	}
 
-	std::sort(tradeoffs.begin(), tradeoffs.end());
-
-	vector<float> averages(100, 0);
-	vector<float> av_latency(100, 0);
-	vector<float> av_read(100, 0);
-	vector<unsigned> counts(100, 0);
-
-	for (int i = 0; i<tradeoffs.size(); ++i)
-	{
-		int close = floor(tradeoffs[i].save);
-		if (tradeoffs[i].save - close <0.1)
-		{
-			averages[close] += tradeoffs[i].penalty;
-			av_latency[close] += tradeoffs[i].latency;
-			av_read[close] += tradeoffs[i].read;
-			counts[close]++;
-		}
-		else if (close + 1 - tradeoffs[i].save <0.1)
-		{
-			averages[close + 1] += tradeoffs[i].penalty;
-			av_latency[close + 1] += tradeoffs[i].latency;
-			av_read[close + 1] += tradeoffs[i].read;
-			counts[close + 1]++;
-		}
-	}
-	vector<tradeoff> results;
-	FILE* fp = fopen("penalties-yes.log", "w+");
-	for (unsigned i = 1; i<100; ++i)
-	{
-		if (counts[i]>0)
-		{
-			fprintf(fp, "Average Penalty for fraction %d (%d close values): %2.2f  Latency: %2.2f Read: %2.2f\n", i, counts[i], averages[i] / counts[i], av_latency[i] / counts[i],
-				av_read[i] / counts[i]);
-			results.push_back(tradeoff(i, averages[i] / counts[i], av_latency[i] / counts[i], 0, av_read[i] / counts[i]));
-		}
-	}
+	FILE* fp = fopen("penalties-yes-multi.log", "w+");
+	tradeoffs = OutputPenalties(fp, tradeoffs);
 	fclose(fp);
-
-
-
-	return results;
+	return tradeoffs;
 }
 
 
 int main(unsigned argc, void** argv)
 {
+	mtr.seed(time(0));
 	//ComputePenalties(RankingLyra);
-	ComputePenalties(RankingRandom);
+	//ComputePenalties(RankingRandom);
 	//ComputePenalties(RankingYescryptLatency);
+	vector<tradeoff> tradeoff1 = ComputePenaltiesMulti(RankingYescryptMulti, 1.33);
+	vector<tradeoff> tradeoff2 = ComputePenalties(RankingYescrypt);
+	return 0;
 }
