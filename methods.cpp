@@ -531,7 +531,7 @@ tradeoff AdvancedMultiRandom(unsigned width, unsigned q, unsigned k)  //Attackin
 }
 
 
-tradeoff RankingYescryptMulti(unsigned q, unsigned top_size, float k)  //Attacking random k-pass graph with advanced technique
+tradeoff RankingYescryptMulti(unsigned q, unsigned top_size, float k)  //Attacking Yescrypt with k passes with ranking method
 {
 	unsigned input_cost = 0;
 	uint32_t width = WIDTH_TEST;
@@ -703,6 +703,6 @@ int main(unsigned argc, void** argv)
 	//ComputePenalties(RankingRandom);
 	//ComputePenalties(RankingYescryptLatency);
 	vector<tradeoff> tradeoff1 = ComputePenaltiesMulti(RankingYescryptMulti, 1.33);
-	vector<tradeoff> tradeoff2 = ComputePenalties(RankingYescrypt);
+	//vector<tradeoff> tradeoff2 = ComputePenalties(RankingYescrypt);
 	return 0;
 }
